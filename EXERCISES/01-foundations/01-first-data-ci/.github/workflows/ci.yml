@@ -1,0 +1,44 @@
+name: basic-cicd
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  run_application:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: EXERCISES/01-foundations/01-first-data-ci
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Get pip cache dir
+        id: pip-cache
+        run: echo "dir=$(python -m pip cache dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: ${{ runner.os }}-python-3.11-pip-${{ hashFiles('EXERCISES/01-foundations/01-first-data-ci/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-python-3.11-pip-
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run script
+        run: python transform.py

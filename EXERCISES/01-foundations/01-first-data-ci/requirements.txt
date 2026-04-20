@@ -1,0 +1,6 @@
+# Starter scaffold for Exercise 1.
+# Add any packages you decide to use while solving the exercise.
+pandas
+psycopg2-binary
+sqlalchemy
+faker
