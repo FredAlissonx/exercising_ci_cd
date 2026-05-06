@@ -20,8 +20,18 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
-          cache-dependency-path: EXERCISES/01-foundations/02-linting-formatting/requirements.txt
+
+      - name: Get pip cache dir
+        id: pip-cache
+        run: echo "dir=$(python -m pip cache dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: ${{ runner.os }}-python-3.11-pip-${{ hashFiles('EXERCISES/01-foundations/02-linting-formatting/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-python-3.11-pip-
 
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
