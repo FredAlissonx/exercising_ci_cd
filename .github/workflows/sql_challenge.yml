@@ -1,0 +1,76 @@
+name: exercise-2-1-sql-pipeline-validation
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: sql_challenge
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d sql_challenge"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: EXERCISES/02-data-pipeline-ci/01-sql-pipeline-validation
+
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGDATABASE: sql_challenge
+      PGUSER: ci_user
+      PGPASSWORD: ci_password
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"; do
+            sleep 2
+          done
+
+      - name: Create schema
+        run: psql -v ON_ERROR_STOP=1 -f sql/01_schema.sql
+
+      - name: Load sample data
+        run: psql -v ON_ERROR_STOP=1 -f sql/02_seed.sql
+
+      - name: Run transformation
+        run: psql -v ON_ERROR_STOP=1 -f sql/03_transform.sql
+
+      - name: Validate results
+        run: psql -v ON_ERROR_STOP=1 -f sql/04_validate.sql
+
+      - name: Show database state on failure
+        if: failure()
+        run: |
+          echo "raw_orders:"
+          psql -v ON_ERROR_STOP=1 -x -c "SELECT * FROM raw_orders ORDER BY order_id;"
+          echo "cleaned_orders:"
+          psql -v ON_ERROR_STOP=1 -x -c "SELECT * FROM cleaned_orders ORDER BY order_id;"
