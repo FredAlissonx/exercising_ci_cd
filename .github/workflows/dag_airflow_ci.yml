@@ -1,0 +1,71 @@
+name: exercise-2-3-airflow-dag-validation
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-dags:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: EXERCISES/02-data-pipeline-ci/03-airflow-dag-validation
+
+    env:
+      PYTHON_VERSION: "3.11"
+      AIRFLOW_VERSION: "2.9.3"
+      AIRFLOW_HOME: ${{ github.workspace }}/.airflow
+      DAGS_DIR: ${{ github.workspace }}/EXERCISES/02-data-pipeline-ci/03-airflow-dag-validation/dags
+      PYTHONPATH: ${{ github.workspace }}/EXERCISES/02-data-pipeline-ci/03-airflow-dag-validation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Get pip cache dir
+        id: pip-cache
+        run: echo "dir=$(python -m pip cache dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: ${{ runner.os }}-python-${{ env.PYTHON_VERSION }}-airflow-${{ env.AIRFLOW_VERSION }}-${{ hashFiles('EXERCISES/02-data-pipeline-ci/03-airflow-dag-validation/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-python-${{ env.PYTHON_VERSION }}-airflow-${{ env.AIRFLOW_VERSION }}-
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install Airflow dependencies
+        run: >
+          python -m pip install
+          --constraint
+          "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+          -r requirements.txt
+
+      - name: Compile Python sources
+        run: python -m compileall dags scripts
+
+      - name: Initialize Airflow metadata database
+        run: airflow db init
+
+      - name: Check DAG import errors
+        run: |
+          airflow dags list-import-errors --subdir "$DAGS_DIR" --output json > import-errors.json
+          python -c "import json, pathlib, sys; p = pathlib.Path('import-errors.json'); data = json.loads(p.read_text() or '[]'); print(json.dumps(data, indent=2)); sys.exit(1 if data else 0)"
+
+      - name: Confirm target DAG is discoverable
+        run: airflow dags list --subdir "$DAGS_DIR" | grep "daily_sales_summary"
